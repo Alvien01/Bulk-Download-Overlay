@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Image — Bulk Download & Overlay Tool</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <div class="logo-mark">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#0a0a0f" stroke-width="2.5" stroke-linecap="round">
+        <rect x="3" y="3" width="18" height="18" rx="3"/>
+        <path d="M3 9h18M9 21V9"/>
+        <circle cx="16" cy="16" r="2.5" fill="#0a0a0f" stroke="none"/>
+      </svg>
+    </div>
+    <div class="logo-text">Image<span>Forge</span></div>
+    <div class="tagline">Image — Bulk Download & Overlay Tool</div>
+  </header>
+
+  <div class="tabs-nav">
+    <button class="tab-btn active" id="tab-bulk" onclick="switchMainTab('bulk')">Bulk Download</button>
+    <button class="tab-btn" id="tab-os" onclick="switchMainTab('os')">Overlay Studio</button>
+  </div>
+
+  <div id="view-bulk">
+  <div class="steps-bar">
+    <div class="step-item">
+      <div class="step-num active" id="snum-1">1</div>
+      <div class="step-label active" id="slbl-1">Excel</div>
+    </div>
+    <div class="step-line"></div>
+    <div class="step-item">
+      <div class="step-num" id="snum-2">2</div>
+      <div class="step-label" id="slbl-2">Overlay</div>
+    </div>
+    <div class="step-line"></div>
+    <div class="step-item">
+      <div class="step-num" id="snum-3">3</div>
+      <div class="step-label" id="slbl-3">Preview</div>
+    </div>
+    <div class="step-line"></div>
+    <div class="step-item">
+      <div class="step-num" id="snum-4">4</div>
+      <div class="step-label" id="slbl-4">Download</div>
+    </div>
+  </div>
+
+  <!-- Step 1: Excel Upload -->
+  <div class="grid-2" id="step1-section">
+    <div class="card">
+      <div class="card-label">Langkah 1</div>
+      <div class="card-title">Upload File Excel</div>
+      <div class="card-desc">File .xlsx atau .xls berisi kolom dengan URL gambar CDN.</div>
+      <div class="drop-zone" id="excel-drop">
+        <input type="file" id="excel-file" accept=".xlsx,.xls,.csv" />
+        <div class="drop-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="12" y1="18" x2="12" y2="12"/>
+            <line x1="9" y1="15" x2="15" y2="15"/>
+          </svg>
+        </div>
+        <div class="drop-title">Drag & drop file Excel</div>
+        <div class="drop-sub">atau klik untuk browse — .xlsx, .xls, .csv</div>
+      </div>
+      <div class="col-select-wrap" id="col-select-wrap" style="display:none">
+        <div>
+          <label>Pilih kolom URL gambar <span style="font-size:11px;color:var(--text-muted);">(klik untuk memilih/batal)</span></label>
+          <div class="chip-row" id="col-chips"></div>
+        </div>
+      </div>
+      <div id="excel-info" style="margin-top:14px; display:none">
+        <div class="stat-mini" id="excel-stats"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Langkah 2</div>
+      <div class="card-title">Upload Gambar Overlay</div>
+      <div class="card-desc">Gambar ini akan ditempelkan di sisi kanan setiap gambar dari Excel.</div>
+      <div class="drop-zone" id="overlay-drop">
+        <input type="file" id="overlay-file" accept="image/*" />
+        <div class="drop-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+            <circle cx="8.5" cy="8.5" r="1.5"/>
+            <polyline points="21 15 16 10 5 21"/>
+          </svg>
+        </div>
+        <div class="drop-title">Drag & drop gambar overlay</div>
+        <div class="drop-sub">PNG, JPG, SVG, WebP — transparan didukung</div>
+      </div>
+      <div class="overlay-img-preview" id="overlay-img-preview" style="display:none">
+        <img id="overlay-preview-img" src="" alt="overlay" />
+      </div>
+
+      <div class="settings-row" id="overlay-settings" style="display:none; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));">
+        <div>
+          <label>Overlay Mode</label>
+          <select id="overlay-mode" onchange="updateOverlayNotice(); generatePreview();">
+            <option value="append-right">Append Right</option>
+            <option value="append-left">Append Left</option>
+            <option value="append-top">Append Top</option>
+            <option value="append-bottom">Append Bottom</option>
+            <option value="center">Center</option>
+          </select>
+        </div>
+        <div>
+          <label>Output Ratio</label>
+          <select id="output-ratio" onchange="updateOverlayNotice(); generatePreview();">
+            <option value="1">1:1 Square</option>
+            <option value="0.8">4:5 Portrait</option>
+            <option value="0.5625">9:16 Story</option>
+            <option value="1.333">4:3 Photo</option>
+            <option value="1.777">16:9 Cinema</option>
+          </select>
+        </div>
+        <div>
+          <label>Gap / Jarak (px)</label>
+          <input type="number" id="overlay-gap" value="0" onchange="generatePreview()" onkeyup="generatePreview()" />
+        </div>
+        <div>
+          <label>Format Hasil</label>
+          <select id="output-fmt">
+            <option value="png">PNG</option>
+            <option value="jpeg">JPEG</option>
+            <option value="webp">WebP</option>
+          </select>
+        </div>
+      </div>
+      <div class="notice" id="overlay-notice" style="display:none"></div>
+    </div>
+  </div>
+
+  <!-- Step 3: Table & Preview -->
+  <div style="margin-top: 20px; display: flex; flex-direction: column; gap: 20px;">
+    <div id="table-section" class="images-table-wrap" style="display:none">
+      <div class="table-header">
+        <div class="table-title">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h18v18H3zM3 9h18M9 3v18"/></svg>
+          Daftar Antrean Gambar
+          <span class="badge badge-accent" id="badge-count">0 gambar</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:12px;">
+          <label style="font-size:12px; display:flex; align-items:center; gap:6px; cursor:pointer;">
+            <input type="checkbox" id="chk-all" checked style="accent-color:var(--accent);"> Pilih Semua
+          </label>
+          <button class="btn btn-outline" style="padding: 6px 14px; font-size:12px;" onclick="resetAll()">Reset</button>
+        </div>
+      </div>
+      <div class="scroll-x">
+        <table class="images-table">
+          <thead>
+            <tr>
+              <th width="40"></th>
+              <th width="60">Baris</th>
+              <th width="100">Sumber</th>
+              <th>URL Gambar</th>
+              <th width="120">Status</th>
+            </tr>
+          </thead>
+          <tbody id="images-tbody">
+            <tr>
+              <td colspan="5">
+                <div class="empty-state">
+                  <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  Upload file Excel terlebih dahulu
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div style="padding:12px 24px; border-top:1px solid var(--border); font-size:11px; color:var(--text-muted); display:flex; justify-content:space-between;">
+        <span>Menampilkan max 200 baris pertama di tabel</span>
+        <span>Total terpilih: <strong id="tbl-count-badge">0</strong></span>
+      </div>
+    </div>
+
+    <div id="preview-section" class="card" style="display:none">
+      <div class="card-label">Langkah 3</div>
+      <div class="card-title">Live Preview</div>
+      <div class="card-desc">Tampilan hasil akhir dengan ratio yang dipilih.</div>
+      
+      <div id="preview-chips" class="chip-row" style="margin-bottom:16px; display:none;"></div>
+
+      <div class="overlay-preview-box" style="margin-top:0;">
+        <canvas id="preview-canvas" style="display:none;"></canvas>
+        <div id="preview-placeholder" class="preview-placeholder">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          <div>Preview akan muncul di sini</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="progress-area" id="progress-area">
+    <div class="progress-label">
+      <span id="progress-text">Memproses gambar...</span>
+      <span id="progress-pct">0%</span>
+    </div>
+    <div class="progress-track">
+      <div class="progress-fill" id="progress-fill"></div>
+    </div>
+    <div class="progress-log" id="progress-log"></div>
+  </div>
+
+  <div class="action-bar">
+    <button class="btn btn-primary" id="btn-process" disabled onclick="startProcessing()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      Proses &amp; Download ZIP
+    </button>
+  </div>
+  </div> <!-- end view-bulk -->
+
+  <!-- OVERLAY STUDIO VIEW -->
+  <div id="view-os" style="display:none;">
+    <div class="steps-bar">
+      <div class="step-item"><div class="step-num active">1</div><div class="step-label active">Assets</div></div><div class="step-line"></div>
+      <div class="step-item"><div class="step-num active">2</div><div class="step-label active">Settings</div></div><div class="step-line"></div>
+      <div class="step-item"><div class="step-num active">3</div><div class="step-label active">Download</div></div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-label">Langkah 1</div>
+        <div class="card-title">Base Images</div>
+        <div class="card-desc">Tambahkan banyak gambar untuk diproses.</div>
+        <div class="drop-zone" id="os-base-drop">
+          <input type="file" id="os-base-file" accept="image/*" multiple />
+          <div class="drop-icon">
+             <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2"/>
+              <circle cx="8.5" cy="8.5" r="1.5"/>
+              <polyline points="21 15 16 10 5 21"/>
+            </svg>
+          </div>
+          <div class="drop-title">Drag & drop base images</div>
+          <div class="drop-sub">Bisa pilih multiple file.</div>
+        </div>
+        <div class="thumb-grid" id="os-base-thumbs"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-label">Langkah 2</div>
+        <div class="card-title">Layer Image</div>
+        <div class="card-desc">Gambar yang akan dioverlay/append.</div>
+        <div class="drop-zone" id="os-layer-drop">
+          <input type="file" id="os-layer-file" accept="image/*" />
+          <div class="drop-icon">
+             <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+            </svg>
+          </div>
+          <div class="drop-title">Drag & drop layer image</div>
+          <div class="drop-sub">SVG, PNG, JPEG, WebP</div>
+        </div>
+        <div class="overlay-img-preview" id="os-layer-preview" style="display:none">
+          <img id="os-layer-preview-img" src="" alt="layer" />
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:20px;">
+      <div class="card-label">Pengaturan</div>
+      <div class="card-title">Overlay Studio Settings</div>
+      <div class="settings-row" style="grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));">
+        <div>
+          <label>Mode</label>
+          <select id="os-mode" onchange="updateOsUI(); generateOsPreview();">
+            <option value="overlay">Overlay (Di atas)</option>
+            <option value="append-right">Append Right</option>
+            <option value="append-left">Append Left</option>
+            <option value="append-top">Append Top</option>
+            <option value="append-bottom">Append Bottom</option>
+          </select>
+        </div>
+        <div id="os-position-group">
+          <label>Position (Overlay)</label>
+          <select id="os-position" onchange="generateOsPreview();">
+            <option value="center">Center</option>
+            <option value="top-left">Top Left</option>
+            <option value="top-right">Top Right</option>
+            <option value="bottom-left">Bottom Left</option>
+            <option value="bottom-right">Bottom Right</option>
+            <option value="fill">Fill / Stretch</option>
+          </select>
+        </div>
+        <div>
+          <label id="os-offset-x-label">Offset X / Gap (px)</label>
+          <input type="number" id="os-offset-x" value="0" onchange="generateOsPreview();" onkeyup="generateOsPreview();" />
+        </div>
+        <div id="os-offset-y-group">
+          <label>Offset Y (px)</label>
+          <input type="number" id="os-offset-y" value="0" onchange="generateOsPreview();" onkeyup="generateOsPreview();" />
+        </div>
+        <div>
+          <label>Output Format</label>
+          <select id="os-format" onchange="generateOsPreview();">
+            <option value="png">PNG</option>
+            <option value="jpeg">JPEG</option>
+            <option value="webp">WebP</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="os-preview-section" style="margin-bottom:20px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <div class="card-label">Preview · Overlay Studio</div>
+        <button class="btn btn-outline" style="padding: 6px 14px; font-size:12px;" onclick="generateOsPreview()">Refresh</button>
+      </div>
+      <div id="os-multi-preview-container" class="os-multi-preview" style="display:none;"></div>
+      <div class="overlay-preview-box" id="os-preview-placeholder" style="margin-top:0;">
+        <div class="preview-placeholder">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          <div>Pilih base image & layer image</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="progress-area" id="os-progress-area">
+      <div class="progress-label">
+        <span id="os-progress-text">Memproses...</span>
+        <span id="os-progress-pct">0%</span>
+      </div>
+      <div class="progress-track"><div class="progress-fill" id="os-progress-fill"></div></div>
+      <div class="progress-log" id="os-progress-log"></div>
+    </div>
+
+    <div class="action-bar" style="gap:16px;">
+      <button class="btn btn-outline" id="btn-os-process-direct" disabled onclick="startOsProcessing('direct')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download All Direct
+      </button>
+      <button class="btn btn-primary" id="btn-os-process-zip" disabled onclick="startOsProcessing('zip')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Proses &amp; Download ZIP
+      </button>
+    </div>
+  </div>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
