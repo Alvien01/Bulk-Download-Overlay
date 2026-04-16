@@ -46,7 +46,6 @@ function handleExcelFile(file) {
       const headers = rows[0].map((h, i) => h || `Kolom ${i + 1}`);
       selectedColumns.clear();
 
-      // Scan setiap kolom: hitung berapa baris yang berisi URL
       const colUrlCounts = headers.map((_, colIdx) => {
         let count = 0;
         for (let r = 1; r < Math.min(rows.length, 30); r++) {
@@ -56,7 +55,6 @@ function handleExcelFile(file) {
         return count;
       });
 
-      // Render chips multi-select
       const chipsContainer = document.getElementById('col-chips');
       chipsContainer.innerHTML = '';
       headers.forEach((h, i) => {
@@ -252,7 +250,6 @@ function loadImage(url) {
     img.crossOrigin = 'anonymous';
     img.onload = () => res(img);
     img.onerror = () => {
-      // try with cors proxy
       const proxy = `https://corsproxy.io/?${encodeURIComponent(url)}`;
       const img2 = new Image();
       img2.crossOrigin = 'anonymous';
@@ -373,7 +370,6 @@ function compositeImages(baseImg) {
       ovY = canvasH - ovH;
 
     } else {
-      // Center: overlay di atas gambar produk
       if (bw / bh > targetAR) {
         canvasW = bw;
         canvasH = Math.round(bw / targetAR);
@@ -395,15 +391,9 @@ function compositeImages(baseImg) {
     c.width = canvasW;
     c.height = canvasH;
     const ctx = c.getContext('2d');
-
-    // Background putih
     ctx.fillStyle = '#FFFFFF';
     ctx.fillRect(0, 0, canvasW, canvasH);
-
-    // Draw base image
     ctx.drawImage(baseImg, baseX, baseY, bw, bh);
-
-    // Draw overlay
     ctx.drawImage(overlayImage, ovX, ovY, ovW, ovH);
 
     res(c);
@@ -412,20 +402,15 @@ function compositeImages(baseImg) {
 
 function getUniqueFilename(url, fmt, usedNames) {
   try {
-    // Extract pathname from URL, removing query params and hash
     let pathname = new URL(url, 'https://x.com').pathname;
-    // Get just the filename part (last segment of path)
     let baseName = pathname.split('/').pop() || 'image';
-    // Remove the original extension
     const dotIdx = baseName.lastIndexOf('.');
     if (dotIdx > 0) {
       baseName = baseName.substring(0, dotIdx);
     }
-    // Sanitize: remove characters not safe for filenames
     baseName = baseName.replace(/[^a-zA-Z0-9_\-\.]/g, '_').replace(/_+/g, '_');
     if (!baseName) baseName = 'image';
     let filename = `${baseName}.${fmt}`;
-    // Handle duplicates by appending _2, _3, etc.
     let counter = 2;
     while (usedNames.has(filename)) {
       filename = `${baseName}_${counter}.${fmt}`;
@@ -433,7 +418,6 @@ function getUniqueFilename(url, fmt, usedNames) {
     }
     return filename;
   } catch (e) {
-    // Fallback if URL parsing fails
     let fallback = `image_${Date.now()}.${fmt}`;
     return fallback;
   }
@@ -481,8 +465,6 @@ async function startProcessing() {
       const i = idx++;
       const item = selectedList[i];
       const globalIdx = imageUrls.indexOf(item);
-
-      // Update status
       item.status = 'loading';
       updateRowStatus(globalIdx, 'loading');
 
@@ -599,9 +581,6 @@ function resetAll() {
   document.getElementById('snum-1').textContent = '1';
 }
 
-// ==========================================
-// OVERLAY STUDIO JS LOGIC
-// ==========================================
 
 let osBaseImages = [];
 let osLayerImage = null;
@@ -609,8 +588,13 @@ let osLayerImage = null;
 function switchMainTab(tab) {
   document.getElementById('tab-bulk').className = 'tab-btn' + (tab === 'bulk' ? ' active' : '');
   document.getElementById('tab-os').className = 'tab-btn' + (tab === 'os' ? ' active' : '');
+  const tabOnlyBulk = document.getElementById('tab-only-bulk');
+  if (tabOnlyBulk) tabOnlyBulk.className = 'tab-btn' + (tab === 'only-bulk' ? ' active' : '');
+  
   document.getElementById('view-bulk').style.display = tab === 'bulk' ? 'block' : 'none';
   document.getElementById('view-os').style.display = tab === 'os' ? 'block' : 'none';
+  const viewOnlyBulk = document.getElementById('view-only-bulk');
+  if (viewOnlyBulk) viewOnlyBulk.style.display = tab === 'only-bulk' ? 'block' : 'none';
 }
 
 function updateOsUI() {
@@ -630,7 +614,6 @@ function updateOsUI() {
   }
 }
 
-// Handlers for Layer Drop
 const osLayerDrop = document.getElementById('os-layer-drop');
 const osLayerFile = document.getElementById('os-layer-file');
 
@@ -654,7 +637,6 @@ function handleOsLayer(file) {
   reader.readAsDataURL(file);
 }
 
-// Handlers for Base Images Drop
 const osBaseDrop = document.getElementById('os-base-drop');
 const osBaseFile = document.getElementById('os-base-file');
 
@@ -883,3 +865,339 @@ async function startOsProcessing(downloadMode = 'zip') {
 
 // Initial UI setup
 updateOsUI();
+
+// ==========================================
+// BULK DOWNLOAD ONLY LOGIC
+// ==========================================
+
+let bdExcelData = [];
+let bdImageUrls = [];
+let bdSelectedRows = new Set();
+let bdSelectedColumns = new Set();
+
+const bdExcelDrop = document.getElementById('bd-excel-drop');
+const bdExcelFileInput = document.getElementById('bd-excel-file');
+
+['dragenter','dragover'].forEach(e => {
+  bdExcelDrop.addEventListener(e, ev => { ev.preventDefault(); bdExcelDrop.classList.add('drag-over'); });
+});
+['dragleave','drop'].forEach(e => {
+  bdExcelDrop.addEventListener(e, () => bdExcelDrop.classList.remove('drag-over'));
+});
+
+bdExcelDrop.addEventListener('drop', ev => {
+  ev.preventDefault();
+  const f = ev.dataTransfer.files[0];
+  if (f) bdHandleExcelFile(f);
+});
+
+bdExcelFileInput.addEventListener('change', e => { if (e.target.files[0]) bdHandleExcelFile(e.target.files[0]); });
+
+function bdHandleExcelFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'binary' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      if (!rows.length) { alert('File kosong atau tidak valid.'); return; }
+
+      bdExcelData = rows;
+      const headers = rows[0].map((h, i) => h || `Kolom ${i + 1}`);
+      bdSelectedColumns.clear();
+
+      const colUrlCounts = headers.map((_, colIdx) => {
+        let count = 0;
+        for (let r = 1; r < Math.min(rows.length, 30); r++) {
+          const val = String(rows[r][colIdx] || '').trim();
+          if (val.startsWith('http') || val.startsWith('//')) count++;
+        }
+        return count;
+      });
+
+      const chipsContainer = document.getElementById('bd-col-chips');
+      chipsContainer.innerHTML = '';
+      headers.forEach((h, i) => {
+        const urlCount = colUrlCounts[i];
+        const isUrl = urlCount > 0;
+        const chip = document.createElement('button');
+        chip.className = 'chip' + (isUrl ? ' active' : '');
+        chip.dataset.colIdx = i;
+        chip.innerHTML = `${h}` + (urlCount > 0 ? ` <span style="font-size:10px;opacity:0.7;">(${urlCount} URL)</span>` : '');
+        if (isUrl) bdSelectedColumns.add(i);
+
+        chip.addEventListener('click', () => {
+          if (bdSelectedColumns.has(i)) {
+            bdSelectedColumns.delete(i);
+            chip.classList.remove('active');
+          } else {
+            bdSelectedColumns.add(i);
+            chip.classList.add('active');
+          }
+          bdOnColumnSelected();
+        });
+        chipsContainer.appendChild(chip);
+      });
+
+      document.getElementById('bd-col-select-wrap').style.display = 'flex';
+      document.getElementById('bd-excel-info').style.display = 'block';
+
+      const stats = document.getElementById('bd-excel-stats');
+      stats.innerHTML = `
+        <div class="stat-mini-item"><div class="stat-mini-val">${rows.length - 1}</div><div class="stat-mini-lbl">Baris data</div></div>
+        <div class="stat-mini-item"><div class="stat-mini-val">${headers.length}</div><div class="stat-mini-lbl">Kolom</div></div>
+      `;
+
+      const excelIcon = bdExcelDrop.querySelector('.drop-icon svg');
+      bdExcelDrop.querySelector('.drop-title').textContent = file.name;
+      bdExcelDrop.querySelector('.drop-sub').textContent = `${(file.size/1024).toFixed(1)} KB — ${wb.SheetNames[0]}`;
+      bdExcelDrop.querySelector('.drop-icon').style.background = 'rgba(200,245,80,0.1)';
+      excelIcon.style.stroke = 'var(--accent)';
+
+      if (bdSelectedColumns.size > 0) bdOnColumnSelected();
+      document.getElementById('bd-snum-2').className = 'step-num active';
+
+    } catch (err) {
+      alert('Gagal membaca file: ' + err.message);
+    }
+  };
+  reader.readAsBinaryString(file);
+}
+
+function bdOnColumnSelected() {
+  if (bdSelectedColumns.size === 0) {
+    bdImageUrls = [];
+    bdRenderTable();
+    document.getElementById('bd-badge-count').textContent = '0 gambar';
+    document.getElementById('bd-tbl-count-badge').textContent = '0';
+    return;
+  }
+
+  const headers = bdExcelData[0].map((h, i) => h || `Kolom ${i + 1}`);
+  bdImageUrls = [];
+  for (let i = 1; i < bdExcelData.length; i++) {
+    for (const colIdx of bdSelectedColumns) {
+        // Find existing object with URL
+        const val = String(bdExcelData[i][colIdx] || '').trim();
+        if (val && (val.startsWith('http') || val.startsWith('//'))) {
+            bdImageUrls.push({ url: val, row: i, col: headers[colIdx], status: 'pending' });
+        }
+    }
+  }
+
+  bdSelectedRows = new Set(bdImageUrls.map((_, i) => i));
+  bdRenderTable();
+  document.getElementById('bd-badge-count').textContent = bdImageUrls.length + ' gambar';
+  document.getElementById('bd-tbl-count-badge').textContent = bdImageUrls.length;
+  document.getElementById('bd-table-section').style.display = 'block';
+  document.getElementById('bd-settings-section').style.display = 'block';
+  bdCheckReady();
+}
+
+function bdRenderTable() {
+  const tbody = document.getElementById('bd-images-tbody');
+  if (!bdImageUrls.length) {
+    tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state">Tidak ada URL valid ditemukan di kolom yang dipilih.</div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = bdImageUrls.slice(0, 200).map((item, i) => `
+    <tr>
+      <td><input type="checkbox" ${bdSelectedRows.has(i) ? 'checked' : ''} onchange="bdToggleRow(${i}, this.checked)" style="accent-color:var(--accent); cursor:pointer;"></td>
+      <td style="color:var(--text-muted); font-size:12px;">${item.row}</td>
+      <td><span class="badge badge-purple" style="font-size:10px;">${item.col || '-'}</span></td>
+      <td><a href="${item.url}" target="_blank" class="url-cell" title="${item.url}">${item.url}</a></td>
+      <td><span class="status-dot ${item.status}" id="bd-sdot-${i}"></span><span id="bd-stxt-${i}" style="font-size:12px;">${statusLabel(item.status)}</span></td>
+    </tr>
+  `).join('') + (bdImageUrls.length > 200 ? `<tr><td colspan="5" style="text-align:center;padding:12px;font-size:13px;color:var(--text-muted);">... dan ${bdImageUrls.length - 200} lainnya</td></tr>` : '');
+}
+
+function bdToggleRow(i, checked) {
+  if (checked) bdSelectedRows.add(i); else bdSelectedRows.delete(i);
+  document.getElementById('bd-tbl-count-badge').textContent = bdSelectedRows.size;
+  bdCheckReady();
+}
+
+document.getElementById('bd-chk-all').addEventListener('change', function() {
+  const boxes = document.querySelectorAll('#bd-images-tbody input[type=checkbox]');
+  boxes.forEach((b, i) => { b.checked = this.checked; if (this.checked) bdSelectedRows.add(i); else bdSelectedRows.delete(i); });
+  document.getElementById('bd-tbl-count-badge').textContent = bdSelectedRows.size;
+  bdCheckReady();
+});
+
+function bdCheckReady() {
+  const ready = bdSelectedRows.size > 0;
+  document.getElementById('bd-btn-process').disabled = !ready;
+}
+
+function bdGetOriginalMimeType(url) {
+  const ext = url.split('.').pop().toLowerCase().split('?')[0];
+  if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg';
+  if (ext === 'png') return 'image/png';
+  if (ext === 'webp') return 'image/webp';
+  if (ext === 'gif') return 'image/gif';
+  return 'image/jpeg'; // fallback
+}
+
+function bdGetOriginalExt(url) {
+  const ext = url.split('.').pop().toLowerCase().split('?')[0];
+  if (ext === 'jpg' || ext === 'jpeg') return 'jpg';
+  if (ext === 'png') return 'png';
+  if (ext === 'webp') return 'webp';
+  if (ext === 'gif') return 'gif';
+  return 'jpg'; // fallback
+}
+
+async function bdStartProcessing() {
+  if (!bdSelectedRows.size) return;
+
+  const btn = document.getElementById('bd-btn-process');
+  btn.disabled = true;
+  btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Memproses...';
+
+  const progressArea = document.getElementById('bd-progress-area');
+  progressArea.classList.add('visible');
+  const progressFill = document.getElementById('bd-progress-fill');
+  const progressText = document.getElementById('bd-progress-text');
+  const progressPct = document.getElementById('bd-progress-pct');
+  const progressLog = document.getElementById('bd-progress-log');
+  progressLog.innerHTML = '';
+
+  const zip = new JSZip();
+  const fmt = document.getElementById('bd-output-fmt').value;
+
+  const selectedList = bdImageUrls.filter((_, i) => bdSelectedRows.has(i));
+  const usedFilenames = new Set();
+  let done = 0, errors = 0;
+
+  function log(msg, cls = '') {
+    const line = document.createElement('div');
+    if (cls) line.className = cls;
+    line.textContent = msg;
+    progressLog.appendChild(line);
+    progressLog.scrollTop = progressLog.scrollHeight;
+  }
+
+  log(`[INFO] Mulai mendownload ${selectedList.length} gambar...`, 'log-info');
+
+  const CONCURRENCY = 4;
+  let idx = 0;
+
+  async function processNext() {
+    while (idx < selectedList.length) {
+      const i = idx++;
+      const item = selectedList[i];
+      const globalIdx = bdImageUrls.indexOf(item);
+      item.status = 'loading';
+      bdUpdateRowStatus(globalIdx, 'loading');
+
+      try {
+        const baseImg = await loadImage(item.url);
+        let base64;
+        let extToUse;
+        
+        if (fmt === 'original') {
+           const c = document.createElement('canvas');
+           c.width = baseImg.naturalWidth || baseImg.width;
+           c.height = baseImg.naturalHeight || baseImg.height;
+           const ctx = c.getContext('2d');
+           ctx.drawImage(baseImg, 0, 0);
+           const mType = bdGetOriginalMimeType(item.url);
+           extToUse = bdGetOriginalExt(item.url);
+           const dataUrl = c.toDataURL(mType, 0.95);
+           base64 = dataUrl.split(',')[1];
+        } else {
+           const c = document.createElement('canvas');
+           c.width = baseImg.naturalWidth || baseImg.width;
+           c.height = baseImg.naturalHeight || baseImg.height;
+           const ctx = c.getContext('2d');
+           if (fmt === 'jpeg') {
+               ctx.fillStyle = '#FFFFFF';
+               ctx.fillRect(0, 0, c.width, c.height);
+           }
+           ctx.drawImage(baseImg, 0, 0);
+           const mimeType = fmt === 'jpeg' ? 'image/jpeg' : fmt === 'webp' ? 'image/webp' : 'image/png';
+           extToUse = fmt;
+           const dataUrl = c.toDataURL(mimeType, 0.92);
+           base64 = dataUrl.split(',')[1];
+        }
+
+        const filename = getUniqueFilename(item.url, extToUse, usedFilenames);
+        usedFilenames.add(filename);
+        zip.file(filename, base64, { base64: true });
+        
+        item.status = 'done';
+        bdUpdateRowStatus(globalIdx, 'done');
+        log(`[OK] ${filename} didownload`, 'log-ok');
+      } catch (err) {
+        item.status = 'error';
+        bdUpdateRowStatus(globalIdx, 'error');
+        errors++;
+        log(`[ERR] Baris ${item.row}: ${err.message}`, 'log-err');
+      }
+
+      done++;
+      const pct = Math.round((done / selectedList.length) * 100);
+      progressFill.style.width = pct + '%';
+      progressPct.textContent = pct + '%';
+      progressText.textContent = `Mendownload ${done} / ${selectedList.length}`;
+    }
+  }
+
+  const workers = Array.from({ length: CONCURRENCY }, () => processNext());
+  await Promise.all(workers);
+
+  log(`[INFO] Selesai! ${done - errors} berhasil, ${errors} gagal.`, 'log-info');
+  progressText.textContent = `Selesai — Membuat ZIP...`;
+
+  const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+  const zipUrl = URL.createObjectURL(zipBlob);
+  const a = document.createElement('a');
+  a.href = zipUrl;
+  a.download = `bulk_download_${Date.now()}.zip`;
+  a.click();
+  URL.revokeObjectURL(zipUrl);
+
+  progressText.textContent = `ZIP didownload! ${done - errors} gambar berhasil.`;
+  log(`[INFO] ZIP berhasil didownload.`, 'log-info');
+
+  btn.disabled = false;
+  btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Download ZIP Lagi`;
+}
+
+function bdUpdateRowStatus(i, status) {
+  const dot = document.getElementById('bd-sdot-' + i);
+  const txt = document.getElementById('bd-stxt-' + i);
+  if (dot) { dot.className = 'status-dot ' + status; }
+  if (txt) { txt.textContent = statusLabel(status); }
+}
+
+function bdResetAll() {
+  bdExcelData = [];
+  bdImageUrls = [];
+  bdSelectedRows = new Set();
+  bdSelectedColumns.clear();
+
+  bdExcelFileInput.value = '';
+
+  document.getElementById('bd-col-select-wrap').style.display = 'none';
+  document.getElementById('bd-excel-info').style.display = 'none';
+  document.getElementById('bd-table-section').style.display = 'none';
+  document.getElementById('bd-settings-section').style.display = 'none';
+  document.getElementById('bd-progress-area').classList.remove('visible');
+
+  document.getElementById('bd-images-tbody').innerHTML = `<tr><td colspan="5"><div class="empty-state">
+    <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+    Upload file Excel terlebih dahulu
+  </div></td></tr>`;
+
+  document.getElementById('bd-btn-process').disabled = true;
+  document.getElementById('bd-btn-process').innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> Download ZIP`;
+
+  const excelIcon = bdExcelDrop.querySelector('.drop-icon svg');
+  bdExcelDrop.querySelector('.drop-title').textContent = 'Drag & drop file Excel';
+  bdExcelDrop.querySelector('.drop-sub').textContent = 'atau klik untuk browse — .xlsx, .xls, .csv';
+  bdExcelDrop.querySelector('.drop-icon').style.background = 'var(--surface3)';
+  excelIcon.style.stroke = 'var(--text-muted)';
+  
+  document.getElementById('bd-snum-2').className = 'step-num';
+}
