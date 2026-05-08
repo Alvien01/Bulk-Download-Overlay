@@ -588,13 +588,13 @@ let osLayerImage = null;
 function switchMainTab(tab) {
   document.getElementById('tab-bulk').className = 'tab-btn' + (tab === 'bulk' ? ' active' : '');
   document.getElementById('tab-os').className = 'tab-btn' + (tab === 'os' ? ' active' : '');
-  const tabOnlyBulk = document.getElementById('tab-only-bulk');
-  if (tabOnlyBulk) tabOnlyBulk.className = 'tab-btn' + (tab === 'only-bulk' ? ' active' : '');
-  
-  document.getElementById('view-bulk').style.display = tab === 'bulk' ? 'block' : 'none';
-  document.getElementById('view-os').style.display = tab === 'os' ? 'block' : 'none';
   const viewOnlyBulk = document.getElementById('view-only-bulk');
   if (viewOnlyBulk) viewOnlyBulk.style.display = tab === 'only-bulk' ? 'block' : 'none';
+
+  const tabResize = document.getElementById('tab-resize');
+  if (tabResize) tabResize.className = 'tab-btn' + (tab === 'resize' ? ' active' : '');
+  const viewResize = document.getElementById('view-resize');
+  if (viewResize) viewResize.style.display = tab === 'resize' ? 'block' : 'none';
 }
 
 function updateOsUI() {
@@ -1201,3 +1201,249 @@ function bdResetAll() {
   
   document.getElementById('bd-snum-2').className = 'step-num';
 }
+
+// ==========================================
+// IMAGE RESIZER LOGIC
+// ==========================================
+
+let rsUploadedFile = null;
+let rsType = 'single';
+
+const rsDropZone = document.getElementById('rs-drop-zone');
+const rsFileInput = document.getElementById('rs-file-input');
+
+function updateRsUI() {
+  rsType = document.querySelector('input[name="rs-type"]:checked').value;
+  const title = document.getElementById('rs-drop-title');
+  const sub = document.getElementById('rs-drop-sub');
+  const input = document.getElementById('rs-file-input');
+
+  if (rsType === 'single') {
+    title.textContent = 'Drag & drop file gambar';
+    sub.textContent = 'atau klik untuk browse — PNG, JPG, WebP';
+    input.accept = 'image/png, image/jpeg, image/jpg, image/webp';
+  } else {
+    title.textContent = 'Drag & drop file RAR / ZIP';
+    sub.textContent = 'atau klik untuk browse — .zip, .rar';
+    input.accept = '.zip, .rar';
+  }
+  
+  // Clear file if type changed
+  rsUploadedFile = null;
+  document.getElementById('rs-file-info').style.display = 'none';
+  document.getElementById('rs-btn-process').disabled = true;
+  document.getElementById('rs-drop-zone').querySelector('.drop-icon').style.background = 'var(--surface3)';
+}
+
+['dragenter','dragover'].forEach(e => {
+  rsDropZone.addEventListener(e, ev => { ev.preventDefault(); rsDropZone.classList.add('drag-over'); });
+});
+['dragleave','drop'].forEach(e => {
+  rsDropZone.addEventListener(e, () => rsDropZone.classList.remove('drag-over'));
+});
+
+rsDropZone.addEventListener('drop', ev => {
+  ev.preventDefault();
+  const f = ev.dataTransfer.files[0];
+  if (f) handleRsFile(f);
+});
+
+rsFileInput.addEventListener('change', e => { if (e.target.files[0]) handleRsFile(e.target.files[0]); });
+
+function handleRsFile(file) {
+  rsUploadedFile = file;
+  const stats = document.getElementById('rs-stats');
+  document.getElementById('rs-file-info').style.display = 'block';
+  
+  const sizeMb = (file.size / (1024 * 1024)).toFixed(2);
+  stats.innerHTML = `
+    <div class="stat-mini-item"><div class="stat-mini-val">${sizeMb} MB</div><div class="stat-mini-lbl">Ukuran Asli</div></div>
+    <div class="stat-mini-item"><div class="stat-mini-val">${file.name.split('.').pop().toUpperCase()}</div><div class="stat-mini-lbl">Tipe File</div></div>
+  `;
+
+  document.getElementById('rs-drop-title').textContent = file.name;
+  document.getElementById('rs-drop-sub').textContent = `${(file.size/1024).toFixed(1)} KB`;
+  document.getElementById('rs-drop-zone').querySelector('.drop-icon').style.background = 'rgba(200,245,80,0.1)';
+  
+  document.getElementById('rs-btn-process').disabled = false;
+  document.getElementById('rs-snum-2').className = 'step-num active';
+}
+
+async function rsStartProcessing() {
+  if (!rsUploadedFile) return;
+
+  const btn = document.getElementById('rs-btn-process');
+  btn.disabled = true;
+  btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Memproses...';
+
+  const progressArea = document.getElementById('rs-progress-area');
+  progressArea.classList.add('visible');
+  const progressFill = document.getElementById('rs-progress-fill');
+  const progressText = document.getElementById('rs-progress-text');
+  const progressPct = document.getElementById('rs-progress-pct');
+  const progressLog = document.getElementById('rs-progress-log');
+  progressLog.innerHTML = '';
+
+  function log(msg, cls = '') {
+    const line = document.createElement('div');
+    if (cls) line.className = cls;
+    line.textContent = msg;
+    progressLog.appendChild(line);
+    progressLog.scrollTop = progressLog.scrollHeight;
+  }
+
+  try {
+    if (rsType === 'single') {
+      log(`[INFO] Memproses file tunggal: ${rsUploadedFile.name}`);
+      const result = await resizeImageIfNeeded(rsUploadedFile);
+      if (result) {
+        downloadBlob(result.blob, result.filename);
+        log(`[OK] Selesai! Ukuran baru: ${(result.blob.size / (1024*1024)).toFixed(2)} MB`, 'log-ok');
+      }
+    } else {
+      log(`[INFO] Membaca archive: ${rsUploadedFile.name}`);
+      const arrayBuffer = await rsUploadedFile.arrayBuffer();
+      const outputZip = new JSZip();
+      let extractedFiles = [];
+
+      const isRar = rsUploadedFile.name.toLowerCase().endsWith('.rar');
+
+      if (isRar) {
+        log(`[INFO] Mendeteksi format RAR. Mengekstrak...`);
+        try {
+          const extractor = new Unrar(arrayBuffer);
+          const fileList = extractor.getFileList();
+          for (const file of fileList) {
+            if (file.type === 'file') {
+              const ext = file.name.split('.').pop().toLowerCase();
+              if (['png', 'jpg', 'jpeg', 'webp'].includes(ext)) {
+                const extractedData = extractor.extract(file.name);
+                extractedFiles.push({
+                  name: file.name,
+                  data: new Blob([extractedData], { type: `image/${ext === 'jpg' ? 'jpeg' : ext}` })
+                });
+              }
+            }
+          }
+        } catch (rarErr) {
+          throw new Error('Gagal mengekstrak RAR: ' + rarErr.message + '. Pastikan file RAR tidak dipassword dan bukan RAR5 (beberapa library lama hanya mendukung RAR4).');
+        }
+      } else {
+        log(`[INFO] Mendeteksi format ZIP. Mengekstrak...`);
+        const zip = new JSZip();
+        const content = await zip.loadAsync(arrayBuffer);
+        const paths = Object.keys(content.files).filter(path => {
+          const ext = path.split('.').pop().toLowerCase();
+          return ['png', 'jpg', 'jpeg', 'webp'].includes(ext) && !content.files[path].dir;
+        });
+        for (const path of paths) {
+          const blob = await content.files[path].async('blob');
+          extractedFiles.push({ name: path, data: blob });
+        }
+      }
+
+      if (extractedFiles.length === 0) {
+        throw new Error('Tidak ada file gambar valid (PNG, JPG, WebP) ditemukan di dalam archive.');
+      }
+
+      log(`[INFO] Menemukan ${extractedFiles.length} gambar untuk diproses.`);
+      
+      for (let i = 0; i < extractedFiles.length; i++) {
+        const item = extractedFiles[i];
+        const filename = item.name.split('/').pop();
+        
+        log(`[INFO] Memproses (${i+1}/${extractedFiles.length}): ${filename}`);
+        const result = await resizeImageIfNeeded(item.data, filename);
+        
+        if (result) {
+          outputZip.file(item.name, result.blob);
+          log(`[OK] ${filename} -> ${(result.blob.size / (1024*1024)).toFixed(2)} MB`, 'log-ok');
+        } else {
+          outputZip.file(item.name, item.data);
+        }
+
+        const pct = Math.round(((i + 1) / extractedFiles.length) * 100);
+        progressFill.style.width = pct + '%';
+        progressPct.textContent = pct + '%';
+        progressText.textContent = `Memproses ${i+1} / ${extractedFiles.length}`;
+      }
+
+      log(`[INFO] Membuat ZIP hasil...`);
+      const zipBlob = await outputZip.generateAsync({ type: 'blob' });
+      downloadBlob(zipBlob, `resized_${rsUploadedFile.name.replace(/\.[^/.]+$/, '')}.zip`);
+      log(`[OK] Archive berhasil didownload!`, 'log-ok');
+    }
+  } catch (err) {
+    log(`[ERR] ${err.message}`, 'log-err');
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> Proses &amp; Download`;
+}
+
+async function resizeImageIfNeeded(fileBlob, filename = null) {
+  const MAX_SIZE = 2 * 1024 * 1024; // 2MB
+  const fname = filename || rsUploadedFile.name;
+  const ext = fname.split('.').pop().toLowerCase();
+  
+  if (fileBlob.size <= MAX_SIZE) {
+    return { blob: fileBlob, filename: fname };
+  }
+
+  // Load image
+  const img = await new Promise((res, rej) => {
+    const url = URL.createObjectURL(fileBlob);
+    const i = new Image();
+    i.onload = () => { URL.revokeObjectURL(url); res(i); };
+    i.onerror = () => rej(new Error('Gagal memuat gambar: ' + fname));
+    i.src = url;
+  });
+
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  
+  let width = img.naturalWidth;
+  let height = img.naturalHeight;
+  let quality = 0.9;
+  let currentBlob = fileBlob;
+  let mimeType = 'image/jpeg';
+  if (ext === 'png') mimeType = 'image/png';
+  else if (ext === 'webp') mimeType = 'image/webp';
+  else mimeType = 'image/jpeg';
+
+  // Iterative reduction
+  let iterations = 0;
+  while (currentBlob.size > MAX_SIZE && iterations < 10) {
+    iterations++;
+    
+    // If JPEG/WebP, try reducing quality first
+    if (mimeType !== 'image/png' && quality > 0.5) {
+      quality -= 0.1;
+    } else {
+      // Reduce dimensions
+      width = Math.floor(width * 0.8);
+      height = Math.floor(height * 0.8);
+    }
+
+    canvas.width = width;
+    canvas.height = height;
+    ctx.clearRect(0, 0, width, height);
+    ctx.drawImage(img, 0, 0, width, height);
+    
+    currentBlob = await new Promise(r => canvas.toBlob(r, mimeType, quality));
+    if (!currentBlob) break;
+  }
+
+  return { blob: currentBlob, filename: fname };
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+updateRsUI();

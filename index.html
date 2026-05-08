@@ -7,6 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/unrar-js@0.2.4/lib/unrar.min.js"></script>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -28,6 +29,7 @@
     <button class="tab-btn active" id="tab-bulk" onclick="switchMainTab('bulk')">Bulk Download & Overlay</button>
     <button class="tab-btn" id="tab-os" onclick="switchMainTab('os')">Overlay Studio</button>
     <button class="tab-btn" id="tab-only-bulk" onclick="switchMainTab('only-bulk')">Bulk Download</button>
+    <button class="tab-btn" id="tab-resize" onclick="switchMainTab('resize')">Image Resizer</button>
   </div>
 
   <div id="view-bulk">
@@ -468,6 +470,74 @@
       </button>
     </div>
   </div>
+
+  <!-- IMAGE RESIZER VIEW -->
+  <div id="view-resize" style="display:none;">
+    <div class="steps-bar">
+      <div class="step-item">
+        <div class="step-num active" id="rs-snum-1">1</div>
+        <div class="step-label active">Upload</div>
+      </div>
+      <div class="step-line"></div>
+      <div class="step-item">
+        <div class="step-num" id="rs-snum-2">2</div>
+        <div class="step-label">Process</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Langkah 1</div>
+      <div class="card-title">Upload File Gambar atau Archive</div>
+      <div class="card-desc">Pilih satu file gambar atau file RAR/ZIP berisi gambar (PNG, JPG, JPEG, WebP).</div>
+      
+      <div class="settings-row" style="margin-bottom: 20px;">
+        <div style="display: flex; gap: 20px; align-items: center;">
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+            <input type="radio" name="rs-type" value="single" checked onchange="updateRsUI()"> Single File
+          </label>
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+            <input type="radio" name="rs-type" value="archive" onchange="updateRsUI()"> RAR / ZIP
+          </label>
+        </div>
+      </div>
+
+      <div class="drop-zone" id="rs-drop-zone">
+        <input type="file" id="rs-file-input" />
+        <div class="drop-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+        </div>
+        <div class="drop-title" id="rs-drop-title">Drag & drop file gambar</div>
+        <div class="drop-sub" id="rs-drop-sub">atau klik untuk browse — PNG, JPG, WebP</div>
+      </div>
+
+      <div id="rs-file-info" style="margin-top:14px; display:none">
+        <div class="stat-mini" id="rs-stats"></div>
+      </div>
+    </div>
+
+    <div class="progress-area" id="rs-progress-area">
+      <div class="progress-label">
+        <span id="rs-progress-text">Memproses gambar...</span>
+        <span id="rs-progress-pct">0%</span>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" id="rs-progress-fill"></div>
+      </div>
+      <div class="progress-log" id="rs-progress-log"></div>
+    </div>
+
+    <div class="action-bar" style="margin-top:20px;">
+      <button class="btn btn-primary" id="rs-btn-process" disabled onclick="rsStartProcessing()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Proses &amp; Download
+      </button>
+    </div>
+  </div>
+</div>
 </div>
 
 <script src="script.js"></script>
