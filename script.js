@@ -1284,6 +1284,9 @@ async function rsStartProcessing() {
   const progressLog = document.getElementById('rs-progress-log');
   progressLog.innerHTML = '';
 
+  const targetInput = document.getElementById('rs-target-size');
+  const targetMB = targetInput ? parseFloat(targetInput.value) || 1 : 1;
+
   function log(msg, cls = '') {
     const line = document.createElement('div');
     if (cls) line.className = cls;
@@ -1292,14 +1295,32 @@ async function rsStartProcessing() {
     progressLog.scrollTop = progressLog.scrollHeight;
   }
 
+  function formatSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+  }
+
   try {
+    log(`[INFO] Target ukuran maksimal: ${targetMB} MB (${formatSize(targetMB * 1024 * 1024)})`);
+
     if (rsType === 'single') {
-      log(`[INFO] Memproses file tunggal: ${rsUploadedFile.name}`);
+      const originalSize = rsUploadedFile.size;
+      log(`[INFO] Memproses file tunggal: ${rsUploadedFile.name} (${formatSize(originalSize)})`);
       const result = await resizeImageIfNeeded(rsUploadedFile);
       if (result) {
+        const newSize = result.blob.size;
+        const reduction = ((1 - newSize / originalSize) * 100).toFixed(1);
         downloadBlob(result.blob, result.filename);
-        log(`[OK] Selesai! Ukuran baru: ${(result.blob.size / (1024*1024)).toFixed(2)} MB`, 'log-ok');
+        if (newSize < originalSize) {
+          log(`[OK] Selesai! ${formatSize(originalSize)} → ${formatSize(newSize)} (berkurang ${reduction}%)`, 'log-ok');
+        } else {
+          log(`[OK] File sudah di bawah target (${formatSize(newSize)}), tidak perlu dikompres.`, 'log-ok');
+        }
       }
+      progressFill.style.width = '100%';
+      progressPct.textContent = '100%';
+      progressText.textContent = 'Selesai!';
     } else {
       log(`[INFO] Membaca archive: ${rsUploadedFile.name}`);
       const arrayBuffer = await rsUploadedFile.arrayBuffer();
@@ -1347,19 +1368,31 @@ async function rsStartProcessing() {
       }
 
       log(`[INFO] Menemukan ${extractedFiles.length} gambar untuk diproses.`);
+      let compressedCount = 0;
+      let skippedCount = 0;
       
       for (let i = 0; i < extractedFiles.length; i++) {
         const item = extractedFiles[i];
         const filename = item.name.split('/').pop();
+        const originalSize = item.data.size;
         
-        log(`[INFO] Memproses (${i+1}/${extractedFiles.length}): ${filename}`);
+        log(`[INFO] Memproses (${i+1}/${extractedFiles.length}): ${filename} (${formatSize(originalSize)})`);
         const result = await resizeImageIfNeeded(item.data, filename);
         
         if (result) {
           outputZip.file(item.name, result.blob);
-          log(`[OK] ${filename} -> ${(result.blob.size / (1024*1024)).toFixed(2)} MB`, 'log-ok');
+          const newSize = result.blob.size;
+          if (newSize < originalSize) {
+            const reduction = ((1 - newSize / originalSize) * 100).toFixed(1);
+            log(`[OK] ${filename}: ${formatSize(originalSize)} → ${formatSize(newSize)} (-${reduction}%)`, 'log-ok');
+            compressedCount++;
+          } else {
+            log(`[OK] ${filename}: sudah di bawah target (${formatSize(newSize)})`, 'log-ok');
+            skippedCount++;
+          }
         } else {
           outputZip.file(item.name, item.data);
+          skippedCount++;
         }
 
         const pct = Math.round(((i + 1) / extractedFiles.length) * 100);
@@ -1368,10 +1401,11 @@ async function rsStartProcessing() {
         progressText.textContent = `Memproses ${i+1} / ${extractedFiles.length}`;
       }
 
+      log(`[INFO] Ringkasan: ${compressedCount} dikompres, ${skippedCount} sudah OK.`);
       log(`[INFO] Membuat ZIP hasil...`);
       const zipBlob = await outputZip.generateAsync({ type: 'blob' });
       downloadBlob(zipBlob, `resized_${rsUploadedFile.name.replace(/\.[^/.]+$/, '')}.zip`);
-      log(`[OK] Archive berhasil didownload!`, 'log-ok');
+      log(`[OK] Archive berhasil didownload! (${formatSize(zipBlob.size)})`, 'log-ok');
     }
   } catch (err) {
     log(`[ERR] ${err.message}`, 'log-err');
@@ -1382,7 +1416,11 @@ async function rsStartProcessing() {
 }
 
 async function resizeImageIfNeeded(fileBlob, filename = null) {
-  const MAX_SIZE = 2 * 1024 * 1024; // 2MB
+  // Read target size from UI input (in MB), default to 1MB
+  const targetInput = document.getElementById('rs-target-size');
+  const targetMB = targetInput ? parseFloat(targetInput.value) || 1 : 1;
+  const MAX_SIZE = Math.round(targetMB * 1024 * 1024);
+  
   const fname = filename || rsUploadedFile.name;
   const ext = fname.split('.').pop().toLowerCase();
   
@@ -1402,36 +1440,92 @@ async function resizeImageIfNeeded(fileBlob, filename = null) {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
   
-  let width = img.naturalWidth;
-  let height = img.naturalHeight;
-  let quality = 0.9;
+  const origWidth = img.naturalWidth;
+  const origHeight = img.naturalHeight;
+  let width = origWidth;
+  let height = origHeight;
+  let quality = 0.92;
   let currentBlob = fileBlob;
   let mimeType = 'image/jpeg';
   if (ext === 'png') mimeType = 'image/png';
   else if (ext === 'webp') mimeType = 'image/webp';
   else mimeType = 'image/jpeg';
 
-  // Iterative reduction
-  let iterations = 0;
-  while (currentBlob.size > MAX_SIZE && iterations < 10) {
-    iterations++;
-    
-    // If JPEG/WebP, try reducing quality first
-    if (mimeType !== 'image/png' && quality > 0.5) {
-      quality -= 0.1;
-    } else {
-      // Reduce dimensions
-      width = Math.floor(width * 0.8);
-      height = Math.floor(height * 0.8);
-    }
+  const isPng = (mimeType === 'image/png');
 
-    canvas.width = width;
-    canvas.height = height;
-    ctx.clearRect(0, 0, width, height);
-    ctx.drawImage(img, 0, 0, width, height);
+  // For PNG: quality parameter is ignored by canvas.toBlob, so we MUST reduce dimensions.
+  // Strategy: estimate a good initial scale based on file size ratio, then iterate.
+  
+  if (isPng) {
+    // PNG compression: iteratively scale down dimensions
+    // Start with an estimated scale factor based on size ratio
+    // PNG file size is roughly proportional to pixel count (width * height)
+    let scaleFactor = Math.sqrt(MAX_SIZE / fileBlob.size) * 0.9; // slightly aggressive
+    scaleFactor = Math.min(scaleFactor, 1);
     
-    currentBlob = await new Promise(r => canvas.toBlob(r, mimeType, quality));
-    if (!currentBlob) break;
+    let iterations = 0;
+    const MAX_ITERATIONS = 25;
+    
+    while (currentBlob.size > MAX_SIZE && iterations < MAX_ITERATIONS) {
+      iterations++;
+      
+      width = Math.max(Math.floor(origWidth * scaleFactor), 16);
+      height = Math.max(Math.floor(origHeight * scaleFactor), 16);
+      
+      canvas.width = width;
+      canvas.height = height;
+      ctx.clearRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0, width, height);
+      
+      currentBlob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+      if (!currentBlob) break;
+      
+      if (currentBlob.size > MAX_SIZE) {
+        // Calculate how much more we need to shrink
+        const sizeRatio = MAX_SIZE / currentBlob.size;
+        // Adjust scale factor proportionally (PNG size ~ pixel count)
+        scaleFactor *= Math.sqrt(sizeRatio) * 0.95;
+        scaleFactor = Math.max(scaleFactor, 0.01); // minimum 1% of original
+      }
+    }
+  } else {
+    // JPEG/WebP: first try reducing quality, then reduce dimensions
+    let iterations = 0;
+    const MAX_ITERATIONS = 25;
+    
+    while (currentBlob.size > MAX_SIZE && iterations < MAX_ITERATIONS) {
+      iterations++;
+      
+      if (quality > 0.3) {
+        // Reduce quality more aggressively based on size ratio
+        const sizeRatio = MAX_SIZE / currentBlob.size;
+        if (sizeRatio < 0.5) {
+          quality -= 0.15;
+        } else {
+          quality -= 0.08;
+        }
+        quality = Math.max(quality, 0.3);
+      } else {
+        // Quality is already low, reduce dimensions
+        const sizeRatio = MAX_SIZE / currentBlob.size;
+        const dimScale = Math.sqrt(sizeRatio) * 0.95;
+        width = Math.max(Math.floor(width * dimScale), 16);
+        height = Math.max(Math.floor(height * dimScale), 16);
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      ctx.clearRect(0, 0, width, height);
+      // Fill white background for JPEG (no alpha)
+      if (mimeType === 'image/jpeg') {
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, width, height);
+      }
+      ctx.drawImage(img, 0, 0, width, height);
+      
+      currentBlob = await new Promise(r => canvas.toBlob(r, mimeType, quality));
+      if (!currentBlob) break;
+    }
   }
 
   return { blob: currentBlob, filename: fname };
