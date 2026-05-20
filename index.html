@@ -159,6 +159,10 @@
           <input type="number" id="overlay-gap" value="0" onchange="generatePreview()" onkeyup="generatePreview()" />
         </div>
         <div>
+          <label>Zoom Produk (%)</label>
+          <input type="number" id="product-zoom" value="100" min="1" max="1000" onchange="generatePreview()" onkeyup="generatePreview()" />
+        </div>
+        <div>
           <label>Format Hasil</label>
           <select id="output-fmt">
             <option value="png">PNG</option>
@@ -263,10 +267,10 @@
     <div class="grid-2">
       <div class="card">
         <div class="card-label">Langkah 1</div>
-        <div class="card-title">Base Images</div>
-        <div class="card-desc">Tambahkan banyak gambar untuk diproses.</div>
+        <div class="card-title">Base Image</div>
+        <div class="card-desc">Tambahkan satu gambar untuk diproses.</div>
         <div class="drop-zone" id="os-base-drop">
-          <input type="file" id="os-base-file" accept="image/*" multiple />
+          <input type="file" id="os-base-file" accept="image/*" />
           <div class="drop-icon">
              <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
               <rect x="3" y="3" width="18" height="18" rx="2"/>
@@ -274,8 +278,8 @@
               <polyline points="21 15 16 10 5 21"/>
             </svg>
           </div>
-          <div class="drop-title">Drag & drop base images</div>
-          <div class="drop-sub">Bisa pilih multiple file.</div>
+          <div class="drop-title">Drag & drop base image</div>
+          <div class="drop-sub">Pilih satu file gambar.</div>
         </div>
         <div class="thumb-grid" id="os-base-thumbs"></div>
       </div>
@@ -370,7 +374,7 @@
     <div class="action-bar" style="gap:16px;">
       <button class="btn btn-outline" id="btn-os-process-direct" disabled onclick="startOsProcessing('direct')">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        Download All Direct
+        Download Direct
       </button>
       <button class="btn btn-primary" id="btn-os-process-zip" disabled onclick="startOsProcessing('zip')">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
@@ -594,7 +598,6 @@
       </button>
     </div>
   </div>
-</div>
 </div>
 
 <script src="script.js"></script>
