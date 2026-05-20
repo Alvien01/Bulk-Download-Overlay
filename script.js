@@ -2,18 +2,24 @@ let excelData = [];
 let imageUrls = [];
 let overlayImage = null;
 let selectedRows = new Set();
+let bulkInputType = 'excel';
+let archiveBaseImages = [];
 
 const excelDrop = document.getElementById('excel-drop');
+const bulkArchiveDrop = document.getElementById('bulk-archive-drop');
 const overlayDrop = document.getElementById('overlay-drop');
 const excelFileInput = document.getElementById('excel-file');
+const bulkArchiveFileInput = document.getElementById('bulk-archive-file');
 const overlayFileInput = document.getElementById('overlay-file');
 
 ['dragenter','dragover'].forEach(e => {
   excelDrop.addEventListener(e, ev => { ev.preventDefault(); excelDrop.classList.add('drag-over'); });
+  bulkArchiveDrop.addEventListener(e, ev => { ev.preventDefault(); bulkArchiveDrop.classList.add('drag-over'); });
   overlayDrop.addEventListener(e, ev => { ev.preventDefault(); overlayDrop.classList.add('drag-over'); });
 });
 ['dragleave','drop'].forEach(e => {
   excelDrop.addEventListener(e, () => excelDrop.classList.remove('drag-over'));
+  bulkArchiveDrop.addEventListener(e, () => bulkArchiveDrop.classList.remove('drag-over'));
   overlayDrop.addEventListener(e, () => overlayDrop.classList.remove('drag-over'));
 });
 
@@ -22,6 +28,11 @@ excelDrop.addEventListener('drop', ev => {
   const f = ev.dataTransfer.files[0];
   if (f) handleExcelFile(f);
 });
+bulkArchiveDrop.addEventListener('drop', ev => {
+  ev.preventDefault();
+  const f = ev.dataTransfer.files[0];
+  if (f) handleBulkArchive(f);
+});
 overlayDrop.addEventListener('drop', ev => {
   ev.preventDefault();
   const f = ev.dataTransfer.files[0];
@@ -29,9 +40,160 @@ overlayDrop.addEventListener('drop', ev => {
 });
 
 excelFileInput.addEventListener('change', e => { if (e.target.files[0]) handleExcelFile(e.target.files[0]); });
+bulkArchiveFileInput.addEventListener('change', e => { if (e.target.files[0]) handleBulkArchive(e.target.files[0]); });
 overlayFileInput.addEventListener('change', e => { if (e.target.files[0]) handleOverlayFile(e.target.files[0]); });
 
 let selectedColumns = new Set();
+
+function switchBulkInputType(type) {
+  bulkInputType = type;
+  const exDrop = document.getElementById('excel-drop');
+  const arDrop = document.getElementById('bulk-archive-drop');
+  
+  document.querySelectorAll('input[name="bulk-input-type"]').forEach(input => {
+    input.checked = (input.value === type);
+  });
+
+  if (type === 'excel') {
+    exDrop.style.display = 'block';
+    arDrop.style.display = 'none';
+    document.getElementById('bulk-input-title').textContent = 'Upload File Excel';
+    document.getElementById('bulk-input-desc').textContent = 'File .xlsx atau .xls berisi kolom dengan URL gambar CDN.';
+    
+    if (excelData.length > 0) {
+      document.getElementById('col-select-wrap').style.display = 'flex';
+      document.getElementById('excel-info').style.display = 'block';
+      onColumnSelected();
+    } else {
+      document.getElementById('col-select-wrap').style.display = 'none';
+      document.getElementById('excel-info').style.display = 'none';
+      imageUrls = [];
+      selectedRows = new Set();
+      renderTable();
+    }
+  } else {
+    exDrop.style.display = 'none';
+    arDrop.style.display = 'block';
+    document.getElementById('bulk-input-title').textContent = 'Upload File ZIP / RAR';
+    document.getElementById('bulk-input-desc').textContent = 'File archive .zip atau .rar berisi file gambar offline (PNG, JPG, JPEG, WebP).';
+    document.getElementById('col-select-wrap').style.display = 'none';
+    
+    if (archiveBaseImages.length > 0) {
+      document.getElementById('excel-info').style.display = 'block';
+      imageUrls = [...archiveBaseImages];
+      selectedRows = new Set(imageUrls.map((_, i) => i));
+      renderTable();
+    } else {
+      document.getElementById('excel-info').style.display = 'none';
+      imageUrls = [];
+      selectedRows = new Set();
+      renderTable();
+    }
+  }
+  checkReady();
+}
+
+async function handleBulkArchive(file) {
+  if (!file) return;
+  
+  const stats = document.getElementById('excel-stats');
+  document.getElementById('excel-info').style.display = 'block';
+  stats.innerHTML = `
+    <div class="stat-mini-item" style="flex: 1;">
+      <div class="stat-mini-lbl" style="font-size: 13px; color: var(--text);">Mengekstrak archive... silakan tunggu</div>
+    </div>
+  `;
+  
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const extractedFiles = [];
+    const isRar = file.name.toLowerCase().endsWith('.rar');
+
+    if (isRar) {
+      try {
+        const extractor = new Unrar(arrayBuffer);
+        const fileList = extractor.getFileList();
+        for (const fileItem of fileList) {
+          if (fileItem.type === 'file') {
+            const ext = fileItem.name.split('.').pop().toLowerCase();
+            if (['png', 'jpg', 'jpeg', 'webp'].includes(ext)) {
+              const extractedData = extractor.extract(fileItem.name);
+              const blob = new Blob([extractedData], { type: `image/${ext === 'jpg' ? 'jpeg' : ext}` });
+              extractedFiles.push({ name: fileItem.name, blob });
+            }
+          }
+        }
+      } catch (rarErr) {
+        throw new Error('Gagal mengekstrak RAR: ' + rarErr.message + '. Pastikan file RAR tidak dipassword.');
+      }
+    } else {
+      const zip = new JSZip();
+      const content = await zip.loadAsync(arrayBuffer);
+      const paths = Object.keys(content.files).filter(path => {
+        const ext = path.split('.').pop().toLowerCase();
+        return ['png', 'jpg', 'jpeg', 'webp'].includes(ext) && !content.files[path].dir;
+      });
+      for (const path of paths) {
+        const blob = await content.files[path].async('blob');
+        extractedFiles.push({ name: path, blob });
+      }
+    }
+
+    if (extractedFiles.length === 0) {
+      throw new Error('Tidak ada file gambar valid (PNG, JPG, WebP) ditemukan di dalam archive.');
+    }
+
+    // Clean up existing Object URLs
+    archiveBaseImages.forEach(item => {
+      if (item.url && item.url.startsWith('blob:')) {
+        URL.revokeObjectURL(item.url);
+      }
+    });
+
+    archiveBaseImages = extractedFiles.map((item, idx) => {
+      const url = URL.createObjectURL(item.blob);
+      return {
+        url: url,
+        filename: item.name.split('/').pop(),
+        row: idx + 1,
+        col: 'Archive',
+        status: 'pending'
+      };
+    });
+
+    imageUrls = [...archiveBaseImages];
+    selectedRows = new Set(imageUrls.map((_, i) => i));
+    
+    stats.innerHTML = `
+      <div class="stat-mini-item"><div class="stat-mini-val">${extractedFiles.length}</div><div class="stat-mini-lbl">Gambar Ditemukan</div></div>
+      <div class="stat-mini-item"><div class="stat-mini-val">${(file.size / (1024 * 1024)).toFixed(2)} MB</div><div class="stat-mini-lbl">Ukuran Archive</div></div>
+    `;
+
+    const dropZone = document.getElementById('bulk-archive-drop');
+    const icon = dropZone.querySelector('.drop-icon svg');
+    dropZone.querySelector('.drop-title').textContent = file.name;
+    dropZone.querySelector('.drop-sub').textContent = `${extractedFiles.length} gambar ditemukan`;
+    dropZone.querySelector('.drop-icon').style.background = 'rgba(200,245,80,0.1)';
+    icon.style.stroke = 'var(--accent)';
+
+    renderTable();
+    document.getElementById('badge-count').textContent = imageUrls.length + ' gambar';
+    document.getElementById('tbl-count-badge').textContent = imageUrls.length;
+    document.getElementById('table-section').style.display = 'block';
+    document.getElementById('preview-section').style.display = 'block';
+    
+    checkReady();
+  } catch (err) {
+    stats.innerHTML = `
+      <div class="stat-mini-item" style="flex: 1;">
+        <div class="stat-mini-val" style="color:var(--danger); font-size:14px;">Error</div>
+        <div class="stat-mini-lbl">${err.message}</div>
+      </div>
+    `;
+    alert('Gagal mengekstrak archive: ' + err.message);
+  }
+}
+
 
 function handleExcelFile(file) {
   const reader = new FileReader();
@@ -136,22 +298,29 @@ function onColumnSelected() {
 function renderTable() {
   const tbody = document.getElementById('images-tbody');
   if (!imageUrls.length) {
-    tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state">Tidak ada URL valid ditemukan di kolom yang dipilih.</div></td></tr>`;
+    const emptyMsg = bulkInputType === 'excel' 
+      ? 'Tidak ada URL valid ditemukan di kolom yang dipilih.' 
+      : 'Tidak ada gambar yang dimuat dari archive.';
+    tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state">${emptyMsg}</div></td></tr>`;
     return;
   }
-  tbody.innerHTML = imageUrls.slice(0, 200).map((item, i) => `
-    <tr>
-      <td><input type="checkbox" ${selectedRows.has(i) ? 'checked' : ''} onchange="toggleRow(${i}, this.checked)" style="accent-color:var(--accent); cursor:pointer;"></td>
-      <td style="color:var(--text-muted); font-size:12px;">${item.row}</td>
-      <td><span class="badge badge-purple" style="font-size:10px;">${item.col || '-'}</span></td>
-      <td><a href="${item.url}" target="_blank" class="url-cell" title="${item.url}">${item.url}</a></td>
-      <td><span class="status-dot ${item.status}" id="sdot-${i}"></span><span id="stxt-${i}" style="font-size:12px;">${statusLabel(item.status)}</span></td>
-    </tr>
-  `).join('') + (imageUrls.length > 200 ? `<tr><td colspan="5" style="text-align:center;padding:12px;font-size:13px;color:var(--text-muted);">... dan ${imageUrls.length - 200} lainnya</td></tr>` : '');
+  tbody.innerHTML = imageUrls.slice(0, 200).map((item, i) => {
+    const isLocal = !!item.filename;
+    const urlDisplay = isLocal ? `📦 ${item.filename}` : item.url;
+    return `
+      <tr>
+        <td><input type="checkbox" ${selectedRows.has(i) ? 'checked' : ''} onchange="toggleRow(${i}, this.checked)" style="accent-color:var(--accent); cursor:pointer;"></td>
+        <td style="color:var(--text-muted); font-size:12px;">${item.row}</td>
+        <td><span class="badge badge-purple" style="font-size:10px;">${item.col || '-'}</span></td>
+        <td><a href="${item.url}" target="_blank" class="url-cell" title="${isLocal ? item.filename : item.url}">${urlDisplay}</a></td>
+        <td><span class="status-dot ${item.status}" id="sdot-${i}"></span><span id="stxt-${i}" style="font-size:12px;">${statusLabel(item.status)}</span></td>
+      </tr>
+    `;
+  }).join('') + (imageUrls.length > 200 ? `<tr><td colspan="5" style="text-align:center;padding:12px;font-size:13px;color:var(--text-muted);">... dan ${imageUrls.length - 200} lainnya</td></tr>` : '');
 
   const chipsWrap = document.getElementById('preview-chips');
   chipsWrap.style.display = 'flex';
-  chipsWrap.innerHTML = '<span style="font-size:12px; color:var(--text-muted); line-height:28px;">Sample URL ke-</span>';
+  chipsWrap.innerHTML = '<span style="font-size:12px; color:var(--text-muted); line-height:28px;">Sample Gambar ke-</span>';
   [0, 1, 2, 3, 4].filter(i => i < imageUrls.length).forEach(i => {
     const chip = document.createElement('button');
     chip.className = 'chip' + (i === 0 ? ' active' : '');
@@ -247,9 +416,15 @@ async function generatePreview(idx = 0) {
 function loadImage(url) {
   return new Promise((res, rej) => {
     const img = new Image();
-    img.crossOrigin = 'anonymous';
+    if (!url.startsWith('blob:') && !url.startsWith('data:')) {
+      img.crossOrigin = 'anonymous';
+    }
     img.onload = () => res(img);
     img.onerror = () => {
+      if (url.startsWith('blob:') || url.startsWith('data:')) {
+        rej(new Error('Cannot load local image: ' + url));
+        return;
+      }
       const proxy = `https://corsproxy.io/?${encodeURIComponent(url)}`;
       const img2 = new Image();
       img2.crossOrigin = 'anonymous';
@@ -400,10 +575,15 @@ function compositeImages(baseImg) {
   });
 }
 
-function getUniqueFilename(url, fmt, usedNames) {
+function getUniqueFilename(url, fmt, usedNames, customFilename = null) {
   try {
-    let pathname = new URL(url, 'https://x.com').pathname;
-    let baseName = pathname.split('/').pop() || 'image';
+    let baseName = 'image';
+    if (customFilename) {
+      baseName = customFilename;
+    } else {
+      let pathname = new URL(url, 'https://x.com').pathname;
+      baseName = pathname.split('/').pop() || 'image';
+    }
     const dotIdx = baseName.lastIndexOf('.');
     if (dotIdx > 0) {
       baseName = baseName.substring(0, dotIdx);
@@ -473,7 +653,7 @@ async function startProcessing() {
         const composite = await compositeImages(baseImg);
         const dataUrl = composite.toDataURL(mimeType, 0.92);
         const base64 = dataUrl.split(',')[1];
-        const filename = getUniqueFilename(item.url, fmt, usedFilenames);
+        const filename = getUniqueFilename(item.url, fmt, usedFilenames, item.filename);
         usedFilenames.add(filename);
         zip.file(filename, base64, { base64: true });
         item.status = 'done';
@@ -533,7 +713,16 @@ function resetAll() {
   selectedRows = new Set();
   selectedColumns.clear();
 
+  // Clear archive Object URLs
+  archiveBaseImages.forEach(item => {
+    if (item.url && item.url.startsWith('blob:')) {
+      URL.revokeObjectURL(item.url);
+    }
+  });
+  archiveBaseImages = [];
+
   excelFileInput.value = '';
+  document.getElementById('bulk-archive-file').value = '';
   overlayFileInput.value = '';
 
   document.getElementById('col-select-wrap').style.display = 'none';
@@ -547,7 +736,7 @@ function resetAll() {
 
   document.getElementById('images-tbody').innerHTML = `<tr><td colspan="5"><div class="empty-state">
     <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-    Upload file Excel terlebih dahulu
+    Upload file Excel atau ZIP/RAR terlebih dahulu
   </div></td></tr>`;
 
   document.getElementById('btn-process').disabled = true;
@@ -558,6 +747,13 @@ function resetAll() {
   excelDrop.querySelector('.drop-sub').textContent = 'atau klik untuk browse — .xlsx, .xls, .csv';
   excelDrop.querySelector('.drop-icon').style.background = 'var(--surface3)';
   excelIcon.style.stroke = 'var(--text-muted)';
+
+  const archiveDropZone = document.getElementById('bulk-archive-drop');
+  const archiveIcon = archiveDropZone.querySelector('.drop-icon svg');
+  archiveDropZone.querySelector('.drop-title').textContent = 'Drag & drop file ZIP / RAR';
+  archiveDropZone.querySelector('.drop-sub').textContent = 'atau klik untuk browse — .zip, .rar';
+  archiveDropZone.querySelector('.drop-icon').style.background = 'var(--surface3)';
+  archiveIcon.style.stroke = 'var(--text-muted)';
 
   const ovIcon = overlayDrop.querySelector('.drop-icon svg');
   overlayDrop.querySelector('.drop-title').textContent = 'Drag & drop gambar overlay';

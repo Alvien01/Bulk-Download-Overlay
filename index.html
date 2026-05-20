@@ -55,12 +55,25 @@
     </div>
   </div>
 
-  <!-- Step 1: Excel Upload -->
+  <!-- Step 1: Excel or Archive Upload -->
   <div class="grid-2" id="step1-section">
     <div class="card">
       <div class="card-label">Langkah 1</div>
-      <div class="card-title">Upload File Excel</div>
-      <div class="card-desc">File .xlsx atau .xls berisi kolom dengan URL gambar CDN.</div>
+      <div class="card-title" id="bulk-input-title">Upload File Excel / Archive</div>
+      <div class="card-desc" id="bulk-input-desc">Pilih tipe input data gambar di bawah ini.</div>
+      
+      <div class="settings-row" style="margin-bottom: 20px; grid-template-columns: 1fr;">
+        <div style="display: flex; gap: 20px; align-items: center; background: var(--surface2); padding: 10px 16px; border-radius: var(--radius); border: 1px solid var(--border);">
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 0; font-size: 13px; color: var(--text);">
+            <input type="radio" name="bulk-input-type" value="excel" checked onchange="switchBulkInputType('excel')" style="accent-color: var(--accent);"> Excel (URL)
+          </label>
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 0; font-size: 13px; color: var(--text);">
+            <input type="radio" name="bulk-input-type" value="archive" onchange="switchBulkInputType('archive')" style="accent-color: var(--accent);"> File ZIP / RAR (Offline)
+          </label>
+        </div>
+      </div>
+
+      <!-- Excel Drop Zone -->
       <div class="drop-zone" id="excel-drop">
         <input type="file" id="excel-file" accept=".xlsx,.xls,.csv" />
         <div class="drop-icon">
@@ -74,6 +87,21 @@
         <div class="drop-title">Drag & drop file Excel</div>
         <div class="drop-sub">atau klik untuk browse — .xlsx, .xls, .csv</div>
       </div>
+
+      <!-- Archive Drop Zone -->
+      <div class="drop-zone" id="bulk-archive-drop" style="display:none">
+        <input type="file" id="bulk-archive-file" accept=".zip,.rar" />
+        <div class="drop-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+        </div>
+        <div class="drop-title">Drag & drop file ZIP / RAR</div>
+        <div class="drop-sub">atau klik untuk browse — .zip, .rar</div>
+      </div>
+
       <div class="col-select-wrap" id="col-select-wrap" style="display:none">
         <div>
           <label>Pilih kolom URL gambar <span style="font-size:11px;color:var(--text-muted);">(klik untuk memilih/batal)</span></label>
