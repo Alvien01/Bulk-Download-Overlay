@@ -70,6 +70,9 @@
           <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 0; font-size: 13px; color: var(--text);">
             <input type="radio" name="bulk-input-type" value="archive" onchange="switchBulkInputType('archive')" style="accent-color: var(--accent);"> File ZIP / RAR (Offline)
           </label>
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 0; font-size: 13px; color: var(--text);">
+            <input type="radio" name="bulk-input-type" value="single" onchange="switchBulkInputType('single')" style="accent-color: var(--accent);"> Single Image
+          </label>
         </div>
       </div>
 
@@ -100,6 +103,20 @@
         </div>
         <div class="drop-title">Drag & drop file ZIP / RAR</div>
         <div class="drop-sub">atau klik untuk browse — .zip, .rar</div>
+      </div>
+
+      <!-- Single Image Drop Zone -->
+      <div class="drop-zone" id="bulk-single-drop" style="display:none">
+        <input type="file" id="bulk-single-file" accept="image/png, image/jpeg, image/jpg, image/webp" />
+        <div class="drop-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+            <circle cx="8.5" cy="8.5" r="1.5"/>
+            <polyline points="21 15 16 10 5 21"/>
+          </svg>
+        </div>
+        <div class="drop-title">Drag & drop file gambar</div>
+        <div class="drop-sub">atau klik untuk browse — .jpg, .jpeg, .png, .webp</div>
       </div>
 
       <div class="col-select-wrap" id="col-select-wrap" style="display:none">

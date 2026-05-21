@@ -4,12 +4,15 @@ let overlayImage = null;
 let selectedRows = new Set();
 let bulkInputType = "excel";
 let archiveBaseImages = [];
+let singleBaseImages = [];
 
 const excelDrop = document.getElementById("excel-drop");
 const bulkArchiveDrop = document.getElementById("bulk-archive-drop");
+const bulkSingleDrop = document.getElementById("bulk-single-drop");
 const overlayDrop = document.getElementById("overlay-drop");
 const excelFileInput = document.getElementById("excel-file");
 const bulkArchiveFileInput = document.getElementById("bulk-archive-file");
+const bulkSingleFileInput = document.getElementById("bulk-single-file");
 const overlayFileInput = document.getElementById("overlay-file");
 
 ["dragenter", "dragover"].forEach((e) => {
@@ -21,6 +24,10 @@ const overlayFileInput = document.getElementById("overlay-file");
     ev.preventDefault();
     bulkArchiveDrop.classList.add("drag-over");
   });
+  bulkSingleDrop.addEventListener(e, (ev) => {
+    ev.preventDefault();
+    bulkSingleDrop.classList.add("drag-over");
+  });
   overlayDrop.addEventListener(e, (ev) => {
     ev.preventDefault();
     overlayDrop.classList.add("drag-over");
@@ -30,6 +37,9 @@ const overlayFileInput = document.getElementById("overlay-file");
   excelDrop.addEventListener(e, () => excelDrop.classList.remove("drag-over"));
   bulkArchiveDrop.addEventListener(e, () =>
     bulkArchiveDrop.classList.remove("drag-over"),
+  );
+  bulkSingleDrop.addEventListener(e, () =>
+    bulkSingleDrop.classList.remove("drag-over"),
   );
   overlayDrop.addEventListener(e, () =>
     overlayDrop.classList.remove("drag-over"),
@@ -46,6 +56,11 @@ bulkArchiveDrop.addEventListener("drop", (ev) => {
   const f = ev.dataTransfer.files[0];
   if (f) handleBulkArchive(f);
 });
+bulkSingleDrop.addEventListener("drop", (ev) => {
+  ev.preventDefault();
+  const f = ev.dataTransfer.files[0];
+  if (f) handleBulkSingle(f);
+});
 overlayDrop.addEventListener("drop", (ev) => {
   ev.preventDefault();
   const f = ev.dataTransfer.files[0];
@@ -58,6 +73,9 @@ excelFileInput.addEventListener("change", (e) => {
 bulkArchiveFileInput.addEventListener("change", (e) => {
   if (e.target.files[0]) handleBulkArchive(e.target.files[0]);
 });
+bulkSingleFileInput.addEventListener("change", (e) => {
+  if (e.target.files[0]) handleBulkSingle(e.target.files[0]);
+});
 overlayFileInput.addEventListener("change", (e) => {
   if (e.target.files[0]) handleOverlayFile(e.target.files[0]);
 });
@@ -68,6 +86,7 @@ function switchBulkInputType(type) {
   bulkInputType = type;
   const exDrop = document.getElementById("excel-drop");
   const arDrop = document.getElementById("bulk-archive-drop");
+  const sgDrop = document.getElementById("bulk-single-drop");
 
   document
     .querySelectorAll('input[name="bulk-input-type"]')
@@ -78,6 +97,7 @@ function switchBulkInputType(type) {
   if (type === "excel") {
     exDrop.style.display = "block";
     arDrop.style.display = "none";
+    sgDrop.style.display = "none";
     document.getElementById("bulk-input-title").textContent =
       "Upload File Excel";
     document.getElementById("bulk-input-desc").textContent =
@@ -94,9 +114,10 @@ function switchBulkInputType(type) {
       selectedRows = new Set();
       renderTable();
     }
-  } else {
+  } else if (type === "archive") {
     exDrop.style.display = "none";
     arDrop.style.display = "block";
+    sgDrop.style.display = "none";
     document.getElementById("bulk-input-title").textContent =
       "Upload File ZIP / RAR";
     document.getElementById("bulk-input-desc").textContent =
@@ -114,7 +135,79 @@ function switchBulkInputType(type) {
       selectedRows = new Set();
       renderTable();
     }
+  } else if (type === "single") {
+    exDrop.style.display = "none";
+    arDrop.style.display = "none";
+    sgDrop.style.display = "block";
+    document.getElementById("bulk-input-title").textContent =
+      "Upload Single Image";
+    document.getElementById("bulk-input-desc").textContent =
+      "Upload satu file gambar tunggal (PNG, JPG, JPEG, WebP).";
+    document.getElementById("col-select-wrap").style.display = "none";
+
+    if (singleBaseImages && singleBaseImages.length > 0) {
+      document.getElementById("excel-info").style.display = "block";
+      imageUrls = [...singleBaseImages];
+      selectedRows = new Set(imageUrls.map((_, i) => i));
+      renderTable();
+    } else {
+      document.getElementById("excel-info").style.display = "none";
+      imageUrls = [];
+      selectedRows = new Set();
+      renderTable();
+    }
   }
+  checkReady();
+}
+
+async function handleBulkSingle(file) {
+  if (!file) return;
+
+  const validTypes = ["image/png", "image/jpeg", "image/jpg", "image/webp"];
+  if (!validTypes.includes(file.type)) {
+    alert("Hanya mendukung format PNG, JPG, JPEG, WebP.");
+    return;
+  }
+
+  const stats = document.getElementById("excel-stats");
+  document.getElementById("excel-info").style.display = "block";
+
+  singleBaseImages.forEach((item) => {
+    if (item.url && item.url.startsWith("blob:")) {
+      URL.revokeObjectURL(item.url);
+    }
+  });
+
+  const url = URL.createObjectURL(file);
+  singleBaseImages = [{
+    url: url,
+    filename: file.name,
+    row: 1,
+    col: "Single",
+    status: "pending",
+  }];
+
+  imageUrls = [...singleBaseImages];
+  selectedRows = new Set([0]);
+
+  stats.innerHTML = `
+    <div class="stat-mini-item"><div class="stat-mini-val">1</div><div class="stat-mini-lbl">Gambar Dimuat</div></div>
+    <div class="stat-mini-item"><div class="stat-mini-val">${(file.size / (1024 * 1024)).toFixed(2)} MB</div><div class="stat-mini-lbl">Ukuran File</div></div>
+  `;
+
+  const dropZone = document.getElementById("bulk-single-drop");
+  const icon = dropZone.querySelector(".drop-icon svg");
+  dropZone.querySelector(".drop-title").textContent = file.name;
+  dropZone.querySelector(".drop-sub").textContent = "1 gambar siap diproses";
+  dropZone.querySelector(".drop-icon").style.background = "rgba(200,245,80,0.1)";
+  icon.style.stroke = "var(--accent)";
+
+  renderTable();
+  document.getElementById("badge-count").textContent = "1 gambar";
+  document.getElementById("tbl-count-badge").textContent = "1";
+  document.getElementById("table-section").style.display = "block";
+  document.getElementById("preview-section").style.display = "block";
+
   checkReady();
 }
 
