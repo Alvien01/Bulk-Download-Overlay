@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ImageForge Auto — Overlay Automation Pipeline</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.full.min.js"></script>
+<link rel="stylesheet" href="auto.css">
+</head>
+<body>
+
+<div class="noise"></div>
+
+<div class="container">
+
+  <header>
+    <div class="logo-wrap" style="cursor: pointer;" onclick="window.location.href='index.html'" title="Kembali ke Main Menu">
+      <div class="logo-mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#0a0a0f" stroke-width="2.5" stroke-linecap="round">
+          <path d="M15 18l-6-6 6-6"/>
+        </svg>
+      </div>
+      <div>
+        <div class="logo-text">ImageForge <span>Auto</span></div>
+        <div class="logo-sub">Overlay Automation Pipeline</div>
+      </div>
+    </div>
+    <div class="header-badge">
+      <span class="pulse-dot"></span>
+      Link-in → Link-out
+    </div>
+  </header>
+
+  <!-- PIPELINE VISUALIZER -->
+  <div class="pipeline-bar">
+    <div class="pipe-step" id="pipe-1">
+      <div class="pipe-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      </div>
+      <div class="pipe-label">Input</div>
+      <div class="pipe-desc">Excel/RAR/ZIP link</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-step" id="pipe-2">
+      <div class="pipe-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+      </div>
+      <div class="pipe-label">Overlay</div>
+      <div class="pipe-desc">JPG/SVG layer</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-step" id="pipe-3">
+      <div class="pipe-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      </div>
+      <div class="pipe-label">Process</div>
+      <div class="pipe-desc">Canvas composite</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-step" id="pipe-4">
+      <div class="pipe-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      </div>
+      <div class="pipe-label">Output</div>
+      <div class="pipe-desc">ZIP + URL list</div>
+    </div>
+  </div>
+
+  <!-- MAIN GRID -->
+  <div class="main-grid">
+
+    <!-- LEFT COLUMN: INPUTS -->
+    <div class="input-column">
+
+      <!-- CARD 1: Source Input -->
+      <div class="card" id="card-source">
+        <div class="card-tag">01 — Source</div>
+        <div class="card-title">Data Source</div>
+        <div class="card-desc">Link ke Excel/Google Sheets, atau file ZIP/RAR berisi gambar.</div>
+
+        <div class="source-tabs">
+          <button class="src-tab active" data-tab="excel" onclick="switchSourceTab('excel')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            Excel / Sheets
+          </button>
+          <button class="src-tab" data-tab="archive" onclick="switchSourceTab('archive')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            ZIP / RAR
+          </button>
+        </div>
+
+        <!-- Excel Tab -->
+        <div id="tab-excel" class="tab-content active">
+          <div class="input-group">
+            <label>Link Excel / Google Sheets</label>
+            <div class="url-input-wrap">
+              <svg class="url-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+              <input type="url" id="excel-url" placeholder="https://docs.google.com/spreadsheets/... atau link Excel" oninput="onInputChange()"/>
+              <button class="url-fetch-btn" onclick="fetchExcel()" id="btn-fetch-excel">Fetch</button>
+            </div>
+            <div class="input-hint">Google Sheets: gunakan "Publish to web" → CSV format</div>
+          </div>
+
+          <!-- OR: local file -->
+          <div class="divider-or">atau upload langsung</div>
+          <div class="mini-drop" id="excel-mini-drop">
+            <input type="file" id="excel-file" accept=".xlsx,.xls,.csv" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            <span id="excel-mini-label">Drag & drop atau klik — .xlsx .xls .csv</span>
+          </div>
+
+          <div id="col-picker" style="display:none; margin-top:14px;">
+            <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:8px;">Pilih kolom URL gambar:</label>
+            <div class="chip-row" id="col-chips"></div>
+          </div>
+          <div id="excel-stat" class="source-stat" style="display:none;"></div>
+        </div>
+
+        <!-- Archive Tab -->
+        <div id="tab-archive" class="tab-content">
+          <div class="input-group">
+            <label>Link ZIP / RAR</label>
+            <div class="url-input-wrap">
+              <svg class="url-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <input type="url" id="archive-url" placeholder="https://img.offscript.id/archives/images.zip" oninput="onInputChange()"/>
+              <button class="url-fetch-btn" onclick="fetchArchive()" id="btn-fetch-archive">Fetch</button>
+            </div>
+            <div class="input-hint">URL harus publicly accessible (no auth)</div>
+          </div>
+          <div class="divider-or">atau upload langsung</div>
+          <div class="mini-drop" id="archive-mini-drop">
+            <input type="file" id="archive-file" accept=".zip,.rar" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span id="archive-mini-label">Drag & drop atau klik — .zip .rar</span>
+          </div>
+          <div id="archive-stat" class="source-stat" style="display:none;"></div>
+        </div>
+      </div>
+
+      <!-- CARD 2: Overlay -->
+      <div class="card" id="card-overlay">
+        <div class="card-tag">02 — Overlay</div>
+        <div class="card-title">Overlay Image</div>
+        <div class="card-desc">Satu gambar layer yang akan ditempelkan ke setiap base image.</div>
+
+        <div class="input-group">
+          <label>Link Overlay (JPG/SVG/PNG)</label>
+          <div class="url-input-wrap">
+            <svg class="url-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            <input type="url" id="overlay-url" placeholder="https://img.offscript.id/overlay/frame.png" oninput="onInputChange()"/>
+            <button class="url-fetch-btn" onclick="fetchOverlay()" id="btn-fetch-overlay">Load</button>
+          </div>
+        </div>
+        <div class="divider-or">atau upload langsung</div>
+        <div class="mini-drop" id="overlay-mini-drop">
+          <input type="file" id="overlay-file" accept="image/*,.svg" />
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          <span id="overlay-mini-label">Drag & drop atau klik — PNG JPG SVG</span>
+        </div>
+
+        <div id="overlay-preview-wrap" style="display:none; margin-top:14px;">
+          <img id="overlay-preview-img" src="" alt="overlay preview" />
+          <div id="overlay-meta" class="overlay-meta"></div>
+        </div>
+      </div>
+
+      <!-- CARD 3: Composite Settings -->
+      <div class="card" id="card-settings">
+        <div class="card-tag">03 — Settings</div>
+        <div class="card-title">Composite Settings</div>
+
+        <div class="settings-grid">
+          <div class="sg-item">
+            <label>Overlay Mode</label>
+            <select id="s-mode" onchange="updateSettingsUI(); generatePreview();">
+              <option value="append-right">Append Right</option>
+              <option value="append-left">Append Left</option>
+              <option value="append-top">Append Top</option>
+              <option value="append-bottom">Append Bottom</option>
+              <option value="center">Center / On Top</option>
+            </select>
+          </div>
+          <div class="sg-item">
+            <label>Output Ratio</label>
+            <select id="s-ratio" onchange="generatePreview();">
+              <option value="1">1:1 Square</option>
+              <option value="0.8">4:5 Portrait</option>
+              <option value="0.5625">9:16 Story</option>
+              <option value="1.333">4:3 Classic</option>
+              <option value="1.777">16:9 Wide</option>
+            </select>
+          </div>
+          <div class="sg-item">
+            <label>Gap (px)</label>
+            <input type="number" id="s-gap" value="0" min="0" onchange="generatePreview()" />
+          </div>
+          <div class="sg-item">
+            <label>Zoom Produk (%)</label>
+            <input type="number" id="s-zoom" value="100" min="1" max="500" onchange="generatePreview()" />
+          </div>
+          <div class="sg-item">
+            <label>Format Output</label>
+            <select id="s-fmt">
+              <option value="jpeg">JPEG</option>
+              <option value="png">PNG</option>
+              <option value="webp">WebP</option>
+            </select>
+          </div>
+          <div class="sg-item">
+            <label>JPEG Quality</label>
+            <input type="number" id="s-quality" value="92" min="1" max="100" />
+          </div>
+        </div>
+      </div>
+
+      <!-- CARD 4: Upload Config -->
+      <div class="card" id="card-upload-cfg">
+        <div class="card-tag">04 — Upload Config</div>
+        <div class="card-title">img.offscript.id Upload</div>
+        <div class="card-desc">Konfigurasi endpoint upload untuk mendapatkan URL output. Kosongkan untuk skip upload (ZIP only mode).</div>
+
+        <div class="upload-mode-toggle">
+          <label class="toggle-opt">
+            <input type="radio" name="upload-mode" value="zip" checked onchange="updateUploadModeUI()">
+            <span>ZIP Only</span>
+          </label>
+          <label class="toggle-opt">
+            <input type="radio" name="upload-mode" value="upload" onchange="updateUploadModeUI()">
+            <span>ZIP + Upload ke CDN</span>
+          </label>
+        </div>
+
+        <div id="upload-cfg-fields" style="display:none;">
+          <div class="input-group" style="margin-top:14px;">
+            <label>Upload Endpoint URL</label>
+            <input type="url" id="upload-endpoint" placeholder="https://img.offscript.id/cgi-bin/upload.cgi" style="width:100%; background:var(--surface2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:10px 14px; font-family:'DM Sans',sans-serif; font-size:13px; outline:none;"/>
+          </div>
+          <div class="input-group" style="margin-top:10px;">
+            <label>Method</label>
+            <select id="upload-method" style="width:100%;">
+              <option value="POST">POST multipart/form-data</option>
+              <option value="PUT">PUT binary</option>
+            </select>
+          </div>
+          <div class="input-group" style="margin-top:10px;">
+            <label>Field Name (untuk multipart)</label>
+            <input type="text" id="upload-field" value="file" placeholder="file" style="width:100%; background:var(--surface2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:10px 14px; font-family:'DM Sans',sans-serif; font-size:13px; outline:none;"/>
+          </div>
+          <div class="input-group" style="margin-top:10px;">
+            <label>Auth Header (opsional)</label>
+            <input type="text" id="upload-auth" placeholder="Bearer your-token atau kosongkan" style="width:100%; background:var(--surface2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:10px 14px; font-family:'DM Sans',sans-serif; font-size:13px; outline:none;"/>
+          </div>
+          <div class="input-group" style="margin-top:10px;">
+            <label>Base URL hasil (prefix untuk URL output)</label>
+            <input type="url" id="upload-base-url" value="https://img.offscript.id/" placeholder="https://img.offscript.id/uploads/" style="width:100%; background:var(--surface2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:10px 14px; font-family:'DM Sans',sans-serif; font-size:13px; outline:none;"/>
+          </div>
+          <div class="notice-info" style="margin-top:12px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            Upload berjalan satu-per-satu. Response JSON dari server harus mengandung field <code>url</code>, <code>path</code>, atau <code>filename</code>.
+          </div>
+        </div>
+      </div>
+
+    </div> <!-- end input-column -->
+
+    <!-- RIGHT COLUMN: PREVIEW + CONSOLE -->
+    <div class="right-column">
+
+      <!-- Preview -->
+      <div class="card preview-card" id="card-preview">
+        <div class="card-tag">Preview</div>
+        <div class="preview-nav">
+          <button class="prev-nav-btn" onclick="previewNav(-1)">‹</button>
+          <span id="preview-label">— / —</span>
+          <button class="prev-nav-btn" onclick="previewNav(1)">›</button>
+          <button class="btn-sm" onclick="generatePreview()">↺ Refresh</button>
+        </div>
+        <div class="preview-box" id="preview-box">
+          <div class="preview-empty" id="preview-empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            <p>Preview akan muncul setelah source & overlay dimuat</p>
+          </div>
+          <canvas id="preview-canvas" style="display:none; max-width:100%; max-height:340px; object-fit:contain; border-radius:8px;"></canvas>
+        </div>
+      </div>
+
+      <!-- Queue -->
+      <div class="card queue-card" id="card-queue" style="display:none;">
+        <div class="card-tag">Queue</div>
+        <div class="queue-header">
+          <span id="queue-count-lbl">0 gambar</span>
+          <label class="chk-all-wrap">
+            <input type="checkbox" id="chk-all" checked onchange="toggleAllRows(this.checked)"> Pilih semua
+          </label>
+        </div>
+        <div class="queue-list" id="queue-list"></div>
+      </div>
+
+      <!-- Console -->
+      <div class="card console-card" id="card-console" style="display:none;">
+        <div class="card-tag">Console</div>
+        <div class="console-header">
+          <div class="progress-wrap">
+            <div class="progress-track"><div class="progress-fill" id="prog-fill"></div></div>
+            <span id="prog-pct">0%</span>
+          </div>
+          <span id="prog-text" style="font-size:12px; color:var(--text-muted);">Idle</span>
+        </div>
+        <div class="console-log" id="console-log"></div>
+      </div>
+
+      <!-- Output URLs -->
+      <div class="card output-card" id="card-output" style="display:none;">
+        <div class="card-tag">Output</div>
+        <div class="output-header">
+          <span id="output-count">0 URL dihasilkan</span>
+          <div style="display:flex; gap:8px;">
+            <button class="btn-sm" onclick="copyAllUrls()">Copy All URLs</button>
+            <button class="btn-sm" onclick="downloadUrlList()">↓ .txt</button>
+          </div>
+        </div>
+        <div class="url-output-list" id="url-output-list"></div>
+      </div>
+
+    </div> <!-- end right-column -->
+
+  </div> <!-- end main-grid -->
+
+  <!-- RUN BUTTON -->
+  <div class="run-bar">
+    <div class="run-status" id="run-status">
+      <span class="run-status-dot" id="run-status-dot"></span>
+      <span id="run-status-text">Belum siap — isi source & overlay image</span>
+    </div>
+    <button class="btn-run" id="btn-run" disabled onclick="startPipeline()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      Run Pipeline
+    </button>
+  </div>
+
+</div> <!-- end container -->
+
+<script src="auto.js"></script>
+</body>
+</html>
